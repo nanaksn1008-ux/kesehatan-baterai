@@ -23,12 +23,14 @@ class MainActivity : Activity() {
 
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var content: LinearLayout
+    private val errors = mutableListOf<String>()
 
     private val bg = Color.parseColor("#101614")
     private val card = Color.parseColor("#1a2421")
     private val fg = Color.parseColor("#e6efec")
     private val muted = Color.parseColor("#93a8a3")
     private val accent = Color.parseColor("#5fd0b0")
+    private val warn = Color.parseColor("#f0a070")
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -61,25 +63,61 @@ class MainActivity : Activity() {
         ui.removeCallbacks(tick)
     }
 
+    private fun <T> safe(name: String, block: () -> T): T? =
+        try {
+            block()
+        } catch (e: Throwable) {
+            errors.add(name + ": " + e.javaClass.simpleName + " " + (e.message ?: ""))
+            null
+        }
+
     private fun render() {
+        errors.clear()
+        try {
+            draw()
+        } catch (e: Throwable) {
+            content.removeAllViews()
+            content.addView(text("Terjadi error", 22f, warn, bold = true))
+            content.addView(
+                text(
+                    e.toString() + "\n" + e.stackTrace.take(8).joinToString("\n"),
+                    12f, muted
+                )
+            )
+        }
+    }
+
+    private fun draw() {
         val bm = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-        val intent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val intent = safe("intent") {
+            registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        }
 
         var soh: Int? = null
         var cycles: Int? = null
         var made: String? = null
         var firstUse: String? = null
         if (Build.VERSION.SDK_INT >= 34) {
-            val v = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_STATE_OF_HEALTH)
-            if (v in 1..100) soh = v
-            val c = intent?.getIntExtra(BatteryManager.EXTRA_CYCLE_COUNT, -1) ?: -1
-            if (c > 0) cycles = c
-            made = formatDate(bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_MANUFACTURING_DATE))
-            firstUse = formatDate(bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_FIRST_USAGE_DATE))
+            soh = safe("kondisi") {
+                bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_STATE_OF_HEALTH)
+            }?.takeIf { it in 1..100 }
+            cycles = safe("siklus") {
+                intent?.getIntExtra(BatteryManager.EXTRA_CYCLE_COUNT, -1) ?: -1
+            }?.takeIf { it > 0 }
+            made = safe("tanggal pembuatan") {
+                formatDate(bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_MANUFACTURING_DATE))
+            }
+            firstUse = safe("penggunaan pertama") {
+                formatDate(bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_FIRST_USAGE_DATE))
+            }
         }
 
-        val counter = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
-        val percent = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        val counter = safe("muatan") {
+            bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+        } ?: 0
+        val percent = safe("persen") {
+            bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        } ?: -1
         val estimateMah: Int? =
             if (counter > 0 && percent in 20..100) (counter / 1000.0 * 100.0 / percent).toInt() else null
 
@@ -146,6 +184,11 @@ class MainActivity : Activity() {
                 12f, muted
             )
         )
+
+        if (errors.isNotEmpty()) {
+            content.addView(spacer(12))
+            content.addView(text("Catatan error:\n" + errors.joinToString("\n"), 12f, warn))
+        }
     }
 
     private fun formatDate(seconds: Long): String? {
