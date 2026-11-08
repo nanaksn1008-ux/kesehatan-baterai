@@ -99,16 +99,16 @@ class MainActivity : Activity() {
         var firstUse: String? = null
         if (Build.VERSION.SDK_INT >= 34) {
             soh = safe("kondisi") {
-                bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_STATE_OF_HEALTH)
+                bm.getIntProperty(10)
             }?.takeIf { it in 1..100 }
             cycles = safe("siklus") {
                 intent?.getIntExtra(BatteryManager.EXTRA_CYCLE_COUNT, -1) ?: -1
             }?.takeIf { it > 0 }
             made = safe("tanggal pembuatan") {
-                formatDate(bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_MANUFACTURING_DATE))
+                formatDate(bm.getLongProperty(8))
             }
             firstUse = safe("penggunaan pertama") {
-                formatDate(bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_FIRST_USAGE_DATE))
+                formatDate(bm.getLongProperty(9))
             }
         }
 
